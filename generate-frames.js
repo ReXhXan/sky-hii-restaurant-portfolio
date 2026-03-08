@@ -30,13 +30,8 @@ async function main() {
       ctx.ellipse(x, y, radiusX, radiusY, rotation, 0, Math.PI * 2);
   }
 
-  function easeOutBounce(x) {
-      const n1 = 7.5625;
-      const d1 = 2.75;
-      if (x < 1 / d1) return n1 * x * x;
-      else if (x < 2 / d1) return n1 * (x -= 1.5 / d1) * x + 0.75;
-      else if (x < 2.5 / d1) return n1 * (x -= 2.25 / d1) * x + 0.9375;
-      else return n1 * (x -= 2.625 / d1) * x + 0.984375;
+  function easeOutCubic(x) {
+      return 1 - Math.pow(1 - x, 3);
   }
 
   function easeInOutCubic(x) {
@@ -56,7 +51,8 @@ async function main() {
     let assembleProgress = Math.min(progress / 0.4, 1.0);
     let rotateProgress = Math.max((progress - 0.4) / 0.6, 0.0);
     
-    const bounceY = easeOutBounce(assembleProgress);
+    // Instead of bounce, we just use a smooth fade-in / scale-up
+    const appearY = easeOutCubic(assembleProgress);
     const smoothRotate = easeInOutCubic(rotateProgress) * Math.PI * 2; 
 
     const cx = WIDTH / 2;
@@ -65,23 +61,18 @@ async function main() {
     const tableRX = 450;
     const tableRY = 180;
 
-    // Table Base
-    ctx.fillStyle = '#2d1b15'; 
-    drawEllipse(ctx, cx, cy + 40, tableRX, tableRY);
-    ctx.fill();
-    ctx.fillRect(cx - tableRX, cy, tableRX * 2, 40);
+    // Minimalist Aesthetic Pedestal Ring
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.1 + (appearY * 0.1)})`;
+    ctx.lineWidth = 1;
+    drawEllipse(ctx, cx, cy, tableRX + 20, tableRY + 20);
+    ctx.stroke();
 
-    // Table Top
+    ctx.strokeStyle = `rgba(255, 255, 255, ${appearY * 0.4})`;
+    ctx.lineWidth = 2;
     drawEllipse(ctx, cx, cy, tableRX, tableRY);
-    const woodTopGrad = ctx.createLinearGradient(cx - tableRX, cy - tableRY, cx + tableRX, cy + tableRY);
-    woodTopGrad.addColorStop(0, '#795548');
-    woodTopGrad.addColorStop(0.5, '#5d4037');
-    woodTopGrad.addColorStop(1, '#3e2723');
-    ctx.fillStyle = woodTopGrad;
-    ctx.fill();
+    ctx.stroke();
 
-    ctx.strokeStyle = '#4e342e';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = `rgba(255, 255, 255, ${appearY * 0.05})`;
     for (let r = 0.2; r < 1.0; r += 0.2) {
         drawEllipse(ctx, cx, cy, tableRX * r, tableRY * r);
         ctx.stroke();
@@ -98,26 +89,29 @@ async function main() {
         const radiusFactor = 0.65; 
         const isoX = cx + Math.cos(finalAngle) * (tableRX * radiusFactor);
         const isoY = cy + Math.sin(finalAngle) * (tableRY * radiusFactor);
-        const flyHeightOffset = -800 * (1 - bounceY);
         const zDepth = Math.sin(finalAngle); 
         
         item.isoX = isoX;
         item.groundY = isoY;
-        item.drawY = isoY + flyHeightOffset - 30;
+        
+        // Items rise gently from slightly below, and scale up from 0
+        const riseOffset = 50 * (1 - appearY);
+        item.drawY = isoY + riseOffset - 30;
         item.zDepth = zDepth;
         
-        const dropScale = 1 + (1 - bounceY) * 2; 
-        item.scale = (1 + zDepth * 0.2) * dropScale;
+        // Scale handles both perspective depth and initial assembly scaling
+        item.scale = (1 + zDepth * 0.2) * (appearY * 1.5);
 
-        item.shadowAlpha = Math.max(0.05, 0.5 - ((1 - bounceY) * 0.4));
-        item.shadowScaleX = item.scale * (1 + (1 - bounceY));
-        item.shadowScaleY = item.scale * 0.3 * (1 + (1 - bounceY));
+        item.shadowAlpha = appearY * 0.5;
+        item.shadowScaleX = item.scale;
+        item.shadowScaleY = item.scale * 0.3;
+        item.opacity = appearY;
     });
 
     items.sort((a, b) => a.zDepth - b.zDepth);
 
     items.forEach(item => {
-        // Shadow/Plate
+        // Shadow/Glow (replaces bulky plates)
         ctx.save();
         ctx.translate(item.isoX, item.groundY);
         
@@ -126,14 +120,10 @@ async function main() {
         ctx.fill();
         
         if (assembleProgress > 0.05) {
-            drawEllipse(ctx, 0, 0, 100 * (1 + item.zDepth * 0.2), 45 * (1 + item.zDepth * 0.2));
-            const plateGrad = ctx.createLinearGradient(0, -45, 0, 45);
-            plateGrad.addColorStop(0, '#444');
-            plateGrad.addColorStop(1, '#222');
-            ctx.fillStyle = plateGrad;
-            ctx.fill();
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = '#666';
+            // A subtle minimalist ring instead of a full physical plate
+            drawEllipse(ctx, 0, 0, 90 * (1 + item.zDepth * 0.2) * item.opacity, 40 * (1 + item.zDepth * 0.2) * item.opacity);
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 * item.opacity})`;
             ctx.stroke();
         }
         ctx.restore();
@@ -147,9 +137,11 @@ async function main() {
         const imgSize = 160;
         
         // Enable screen blend mode to drop the black background and only draw the white sketch lines
+        ctx.globalAlpha = item.opacity;
         ctx.globalCompositeOperation = 'screen';
         ctx.drawImage(item.img, -imgSize/2, -imgSize/2, imgSize, imgSize);
         ctx.globalCompositeOperation = 'source-over'; // reset
+        ctx.globalAlpha = 1.0;
         ctx.restore();
     });
 

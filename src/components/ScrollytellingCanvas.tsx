@@ -63,7 +63,7 @@ export default function ScrollytellingCanvas() {
         scrollTrigger: {
             trigger: containerRef.current,
             start: 'top top',
-            end: '+=400%', // Pin for 4x viewport height
+            end: '+=200%', // Pin for 2x viewport height instead of 4x to reduce scrolling amount
             pin: true,
             scrub: 0.1, // Small scrub value for smoother frame updates without delay
         }
